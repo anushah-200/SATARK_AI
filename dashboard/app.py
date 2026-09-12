@@ -1066,6 +1066,195 @@ if len(
         station_fig,
         use_container_width=True
     )
+    # ============================================================
+# SPATIAL CONSISTENCY CHECK
+# ============================================================
+
+st.markdown("## Spatial Consistency Check")
+
+if all(
+    col in dashboard_df.columns
+    for col in ["latitude", "longitude", "temperature"]
+):
+
+    spatial_station_options = sorted(
+        dashboard_df["station_name"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    if len(spatial_station_options) > 1:
+
+        spatial_station = st.selectbox(
+            "Select Station",
+            spatial_station_options,
+            key="spatial_consistency_station"
+        )
+
+        station_data = dashboard_df[
+            dashboard_df["station_name"] == spatial_station
+        ].copy()
+
+        station_data = station_data.sort_values(
+            "timestamp"
+        )
+
+        if not station_data.empty:
+
+            latest_station = station_data.iloc[-1]
+
+            current_time = latest_station["timestamp"]
+
+            comparison_df = dashboard_df[
+                dashboard_df["timestamp"] == current_time
+            ].copy()
+
+            comparison_df = comparison_df.dropna(
+                subset=["latitude", "longitude", "temperature"]
+            )
+
+            if len(comparison_df) > 1:
+
+                selected_row = comparison_df[
+                    comparison_df["station_name"] == spatial_station
+                ]
+
+                if not selected_row.empty:
+
+                    selected_row = selected_row.iloc[0]
+
+                    selected_lat = selected_row["latitude"]
+                    selected_lon = selected_row["longitude"]
+                    selected_temp = selected_row["temperature"]
+
+                    comparison_df["distance"] = (
+                        (
+                            comparison_df["latitude"]
+                            - selected_lat
+                        ) ** 2
+                        +
+                        (
+                            comparison_df["longitude"]
+                            - selected_lon
+                        ) ** 2
+                    ) ** 0.5
+
+                    neighbors = comparison_df[
+                        comparison_df["station_name"]
+                        != spatial_station
+                    ].sort_values("distance").head(3)
+
+                    if not neighbors.empty:
+
+                        neighbor_average = neighbors[
+                            "temperature"
+                        ].mean()
+
+                        spatial_difference = (
+                            selected_temp
+                            - neighbor_average
+                        )
+
+                        c1, c2, c3 = st.columns(3)
+
+                        with c1:
+                            st.metric(
+                                "Station Temperature",
+                                f"{selected_temp:.2f} °C"
+                            )
+
+                        with c2:
+                            st.metric(
+                                "Nearby Station Average",
+                                f"{neighbor_average:.2f} °C"
+                            )
+
+                        with c3:
+                            st.metric(
+                                "Spatial Difference",
+                                f"{spatial_difference:+.2f} °C"
+                            )
+
+                        if abs(spatial_difference) >= 5:
+
+                            st.error(
+                                "⚠️ Spatial Inconsistency Detected — "
+                                "the selected station differs significantly "
+                                "from nearby stations."
+                            )
+
+                        else:
+
+                            st.success(
+                                "✓ Spatially Consistent — "
+                                "the selected station is broadly consistent "
+                                "with nearby stations."
+                            )
+
+                        spatial_plot = px.bar(
+                            neighbors,
+                            x="station_name",
+                            y="temperature",
+                            title="Nearby Station Temperature Comparison",
+                            labels={
+                                "station_name": "Station",
+                                "temperature": "Temperature (°C)"
+                            }
+                        )
+
+                        spatial_plot.add_hline(
+                            y=selected_temp,
+                            line_dash="dash",
+                            annotation_text=(
+                                f"{spatial_station}: "
+                                f"{selected_temp:.2f} °C"
+                            )
+                        )
+
+                        st.plotly_chart(
+                            spatial_plot,
+                            use_container_width=True
+                        )
+
+                        st.caption(
+                            "Spatial consistency is a risk signal based on "
+                            "nearby station observations. It helps distinguish "
+                            "station-specific anomalies from broader weather variation."
+                        )
+
+                    else:
+
+                        st.info(
+                            "No nearby station data available for comparison."
+                        )
+
+                else:
+
+                    st.info(
+                        "Selected station data is unavailable at the latest timestamp."
+                    )
+
+            else:
+
+                st.info(
+                    "Not enough simultaneous station observations "
+                    "for spatial comparison."
+                )
+
+    else:
+
+        st.info(
+            "Spatial consistency requires data from multiple stations."
+        )
+
+else:
+
+    st.warning(
+        "Latitude, longitude, or temperature data is unavailable. "
+        "Spatial consistency check cannot be performed."
+    )
 
 
 # ============================================================
