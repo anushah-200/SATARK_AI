@@ -146,7 +146,7 @@ def diagnose_faults(df: pd.DataFrame,
 # ---------------------------------------------------------------------
 # C + D + E. Correction / reconstruction module
 # ---------------------------------------------------------------------
-def correct_temperature(df: pd.DataFrame, min_confidence: float = 0.5) -> pd.DataFrame:
+def correct_temperature(df: pd.DataFrame, min_confidence: float = 0.3) -> pd.DataFrame:
     """
     Adds temperature_original, temperature_corrected, correction_applied.
     Uses ONLY neighboring valid observations / rolling medians already
@@ -267,7 +267,7 @@ def train_ml_corrector(df: pd.DataFrame, features=None, model_path=None):
 
 
 def apply_ml_correction(df: pd.DataFrame, model, features=None,
-                         labels=None, min_confidence: float = 0.5) -> pd.DataFrame:
+                         labels=None, min_confidence: float = 0.3) -> pd.DataFrame:
     """
     Adds temperature_corrected_ml (the ML model's raw prediction, filled only
     for rows diagnosed as one of `labels`) and overwrites temperature_corrected
