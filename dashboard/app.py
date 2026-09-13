@@ -27,7 +27,7 @@ from src.live_demo import (  # noqa: E402
 # ============================================================
 
 st.set_page_config(
-    page_title="SkyGuard AI",
+    page_title="SATARK AI",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -786,7 +786,7 @@ st.markdown(
 st.markdown(
     """
     <div class="hero-panel">
-        <div class="hero-title">SkyGuard AI <span class="hero-link">↗</span></div>
+        <div class="hero-title">SATARK AI <span class="hero-link">↗</span></div>
         <p class="hero-subtitle">Predictive Anomaly Detection and Sensor Monitoring</p>
         <p class="hero-desc">
             Historical anomaly detection dashboard with diagnosis, correction and sensor monitoring.
@@ -1671,24 +1671,13 @@ if not demo_stations.empty:
 
 
 # ============================================================
-# HISTORICAL REPLAY NOTICE
-# ============================================================
-
-st.info(
-    "Demo Mode: The dashboard uses historical data replay and "
-    "simulation to demonstrate anomaly monitoring. It should not "
-    "be presented as a live AWS data stream."
-)
-
-
-# ============================================================
 # FOOTER
 # ============================================================
 
 st.markdown(
     """
     <div class="footer">
-        <b>SkyGuard AI</b><br>
+        <b>SATARK AI</b><br>
         Predictive Anomaly Detection, Diagnosis and Sensor Correction<br>
         P4 — Streamlit and Plotly System Integration
     </div>
