@@ -15,6 +15,12 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DASHBOARD_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR))
 
+from src.live_demo import (  # noqa: E402
+    get_station_baseline,
+    list_demo_stations,
+    run_live_demo,
+)
+
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -413,6 +419,132 @@ st.markdown(
         border-radius: 16px;
         padding: 0.35rem;
         backdrop-filter: blur(10px);
+    }}
+
+    /* Live Demo — Sensor Fault Simulation */
+    .demo-banner {{
+        background: rgba(8, 18, 38, 0.48);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 0.85rem 1.15rem;
+        margin: 0.35rem 0 1rem 0;
+        color: rgba(220, 230, 245, 0.9);
+        font-size: 0.92rem;
+    }}
+
+    .demo-pipeline {{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.45rem 0.35rem;
+        margin: 0.75rem 0 1.1rem 0;
+    }}
+
+    .demo-pipe-step {{
+        background: rgba(10, 20, 40, 0.55);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 12px;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #e8eef8;
+        backdrop-filter: blur(12px);
+    }}
+
+    .demo-pipe-step.active {{
+        border-color: rgba(96, 165, 250, 0.55);
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+    }}
+
+    .demo-pipe-arrow {{
+        color: rgba(180, 200, 230, 0.55);
+        font-size: 0.95rem;
+        padding: 0 0.15rem;
+    }}
+
+    .demo-status-anomaly {{
+        background: rgba(239, 68, 68, 0.18);
+        border: 1px solid rgba(239, 68, 68, 0.4);
+        color: #fecaca;
+        border-radius: 14px;
+        padding: 0.85rem 1.15rem;
+        font-weight: 800;
+        font-size: 1.15rem;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.85rem;
+    }}
+
+    .demo-status-normal {{
+        background: rgba(34, 197, 94, 0.14);
+        border: 1px solid rgba(34, 197, 94, 0.35);
+        color: #bbf7d0;
+        border-radius: 14px;
+        padding: 0.85rem 1.15rem;
+        font-weight: 800;
+        font-size: 1.15rem;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.85rem;
+    }}
+
+    .demo-status-unknown {{
+        background: rgba(234, 179, 8, 0.14);
+        border: 1px solid rgba(234, 179, 8, 0.35);
+        color: #fde68a;
+        border-radius: 14px;
+        padding: 0.85rem 1.15rem;
+        font-weight: 800;
+        font-size: 1.15rem;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.85rem;
+    }}
+
+    .demo-result-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.5rem 0 0.85rem 0;
+    }}
+
+    .demo-result-card {{
+        background: rgba(8, 18, 38, 0.48);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 14px;
+        padding: 0.9rem 1.1rem;
+    }}
+
+    .demo-result-label {{
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: rgba(214, 226, 244, 0.72);
+        margin: 0 0 0.3rem 0;
+    }}
+
+    .demo-result-value {{
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #fff;
+        margin: 0;
+        line-height: 1.2;
+    }}
+
+    .demo-explain {{
+        background: rgba(8, 18, 38, 0.42);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 14px;
+        padding: 0.9rem 1.1rem;
+        color: rgba(226, 234, 247, 0.92);
+        font-size: 0.95rem;
+        line-height: 1.45;
+    }}
+
+    @media (max-width: 720px) {{
+        .demo-result-grid {{
+            grid-template-columns: 1fr;
+        }}
     }}
     </style>
     """,
@@ -1287,6 +1419,255 @@ else:
         "Latitude, longitude, or temperature data is unavailable. "
         "Spatial consistency check cannot be performed."
     )
+
+
+# ============================================================
+# LIVE DEMO — SENSOR FAULT SIMULATION
+# ============================================================
+
+st.markdown("## Live Demo — Sensor Fault Simulation")
+st.markdown(
+    """
+    <div class="demo-banner">
+        Historical Replay / Simulation — not live AWS data.
+        Uses saved models and station history in memory; existing CSV outputs are not modified.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+try:
+    demo_stations = list_demo_stations()
+except Exception as demo_exc:
+    demo_stations = pd.DataFrame()
+    st.warning(f"Live demo unavailable: {demo_exc}")
+
+if not demo_stations.empty:
+    demo_stations = demo_stations.copy()
+    demo_stations["label"] = (
+        demo_stations["station_name"].astype(str)
+        + " ("
+        + demo_stations["station_id"].astype(str)
+        + ")"
+    )
+
+    if "demo_station_id" not in st.session_state:
+        st.session_state.demo_station_id = int(demo_stations.iloc[0]["station_id"])
+
+    def _apply_demo_baseline(station_id: int) -> None:
+        baseline = get_station_baseline(station_id)
+        st.session_state.demo_temperature = float(baseline["temperature"])
+        st.session_state.demo_pressure = float(baseline["pressure"])
+        st.session_state.demo_humidity = float(baseline["humidity"])
+
+    if "demo_temperature" not in st.session_state:
+        _apply_demo_baseline(st.session_state.demo_station_id)
+
+    st.markdown("**Demo presets** (sets input values only — inference still runs via `run_live_demo`)")
+    preset_cols = st.columns(4)
+    preset_station = int(st.session_state.demo_station_id)
+    try:
+        preset_base = get_station_baseline(preset_station)
+    except Exception:
+        preset_base = {
+            "temperature": 25.0,
+            "pressure": 1013.0,
+            "humidity": 50.0,
+        }
+
+    with preset_cols[0]:
+        if st.button("Normal Reading", use_container_width=True):
+            _apply_demo_baseline(preset_station)
+    with preset_cols[1]:
+        if st.button("Temperature Spike (55°C)", use_container_width=True):
+            _apply_demo_baseline(preset_station)
+            st.session_state.demo_temperature = 55.0
+    with preset_cols[2]:
+        if st.button("Frozen Sensor", use_container_width=True):
+            _apply_demo_baseline(preset_station)
+            # Identical to last reading — honest single-step freeze attempt
+            st.session_state.demo_temperature = float(preset_base["temperature"])
+    with preset_cols[3]:
+        if st.button("Noisy Reading", use_container_width=True):
+            _apply_demo_baseline(preset_station)
+            st.session_state.demo_temperature = float(preset_base["temperature"]) + 4.5
+
+    demo_input_col, demo_action_col = st.columns([3, 1])
+
+    with demo_input_col:
+        station_labels = demo_stations["label"].tolist()
+        current_label = demo_stations.loc[
+            demo_stations["station_id"] == st.session_state.demo_station_id,
+            "label",
+        ]
+        default_idx = (
+            station_labels.index(current_label.iloc[0])
+            if len(current_label) and current_label.iloc[0] in station_labels
+            else 0
+        )
+        selected_label = st.selectbox(
+            "Station",
+            options=station_labels,
+            index=default_idx,
+            key="demo_station_label",
+        )
+        selected_station_id = int(
+            demo_stations.loc[
+                demo_stations["label"] == selected_label, "station_id"
+            ].iloc[0]
+        )
+        if selected_station_id != st.session_state.demo_station_id:
+            st.session_state.demo_station_id = selected_station_id
+            _apply_demo_baseline(selected_station_id)
+
+        t_col, p_col, h_col = st.columns(3)
+        with t_col:
+            st.number_input(
+                "Temperature (°C)",
+                step=0.1,
+                format="%.1f",
+                key="demo_temperature",
+            )
+        with p_col:
+            st.number_input(
+                "Pressure (hPa)",
+                step=0.1,
+                format="%.1f",
+                key="demo_pressure",
+            )
+        with h_col:
+            st.number_input(
+                "Humidity (%)",
+                step=0.1,
+                format="%.1f",
+                key="demo_humidity",
+            )
+
+    with demo_action_col:
+        st.write("")
+        st.write("")
+        run_demo_clicked = st.button(
+            "▶ Run Detection",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if run_demo_clicked:
+        with st.spinner("Running historical simulation through detection → diagnosis → correction…"):
+            demo_result = run_live_demo(
+                station_id=st.session_state.demo_station_id,
+                timestamp=None,
+                temperature=float(st.session_state.demo_temperature),
+                pressure=float(st.session_state.demo_pressure),
+                humidity=float(st.session_state.demo_humidity),
+            )
+        st.session_state.demo_last_result = demo_result
+
+    if "demo_last_result" in st.session_state:
+        result = st.session_state.demo_last_result
+        stages = result.get("pipeline_stages") or {}
+
+        pipe_html = ['<div class="demo-pipeline">']
+        stage_defs = [
+            ("Sensor Reading", "active"),
+            ("Quality Check", "active" if stages.get("quality_check") else ""),
+            ("Anomaly Detection", "active" if stages.get("anomaly_detection") else ""),
+            ("Diagnosis", "active" if stages.get("diagnosis") else ""),
+            ("Correction", "active" if stages.get("correction") else ""),
+            ("Sensor Health", "active" if stages.get("sensor_health") else ""),
+        ]
+        for i, (label, cls) in enumerate(stage_defs):
+            if i:
+                pipe_html.append('<span class="demo-pipe-arrow">↓</span>')
+            pipe_html.append(
+                f'<div class="demo-pipe-step {cls}">{label}</div>'
+            )
+        pipe_html.append("</div>")
+        st.markdown("".join(pipe_html), unsafe_allow_html=True)
+
+        fault = str(result.get("diagnosed_fault", "UNKNOWN"))
+        if fault == "INSUFFICIENT CONTEXT":
+            status_class = "demo-status-unknown"
+            status_text = "INSUFFICIENT CONTEXT"
+        elif result.get("anomaly_detected"):
+            status_class = "demo-status-anomaly"
+            status_text = f"ANOMALY — {fault}"
+        else:
+            status_class = "demo-status-normal"
+            status_text = "NORMAL"
+
+        st.markdown(
+            f'<div class="{status_class}">{status_text}</div>',
+            unsafe_allow_html=True,
+        )
+
+        original_temp = result.get("temperature_original")
+        corrected_temp = result.get("temperature_corrected")
+        original_txt = (
+            f"{original_temp:.2f} °C" if original_temp is not None else "N/A"
+        )
+        corrected_txt = (
+            f"{corrected_temp:.2f} °C" if corrected_temp is not None else "N/A"
+        )
+
+        conf = result.get("diagnosis_confidence")
+        conf_txt = f"{conf:.2f}" if conf is not None else "N/A"
+        score = result.get("anomaly_score")
+        score_txt = str(score) if score is not None else "N/A"
+
+        st.markdown(
+            f"""
+            <div class="demo-result-grid">
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Original Temperature</p>
+                    <p class="demo-result-value">{original_txt}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Corrected Temperature</p>
+                    <p class="demo-result-value">{corrected_txt}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Diagnosis</p>
+                    <p class="demo-result-value">{fault}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Confidence</p>
+                    <p class="demo-result-value">{conf_txt}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Anomaly Score</p>
+                    <p class="demo-result-value">{score_txt}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Severity</p>
+                    <p class="demo-result-value">{result.get("severity", "N/A")}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Correction Method</p>
+                    <p class="demo-result-value">{result.get("correction_method", "none")}</p>
+                </div>
+                <div class="demo-result-card">
+                    <p class="demo-result-label">Sensor Health</p>
+                    <p class="demo-result-value">{result.get("sensor_health_status", "N/A")} ({result.get("sensor_health_score", "—")})</p>
+                </div>
+            </div>
+            <div class="demo-explain">
+                <strong>Explanation</strong><br>
+                {result.get("explanation") or result.get("reason") or "No explanation returned."}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        detectors = result.get("detector_scores") or {}
+        if detectors:
+            st.caption(
+                "Detector votes — "
+                f"rule: {detectors.get('rule_score', 0)}, "
+                f"statistical: {detectors.get('statistical_score', 0)}, "
+                f"isolation: {detectors.get('isolation_score', 0)}, "
+                f"temporal: {detectors.get('temporal_score', 0)}"
+            )
 
 
 # ============================================================
